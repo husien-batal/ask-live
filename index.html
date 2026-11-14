@@ -8,15 +8,11 @@
 <title>Live Q&amp;A — Speaker</title>
 <style>
 :root{
-  --bg:#f6f4ef;--panel:#fff;--ink:#1c1b19;--muted:#5d5a53;--line:#d9d4c8;
-  --accent:#1f5fd0;--on-accent:#fff;--danger:#b3261a;--ok-bg:#dff3e3;--ok-ink:#125227;
-  --bad-bg:#fbe1dd;--bad-ink:#8a1c10;
-}
-@media(prefers-color-scheme:dark){:root{
+  color-scheme:dark;
   --bg:#161513;--panel:#22211e;--ink:#f1eee7;--muted:#aaa59a;--line:#3b3934;
   --accent:#8fb4ff;--on-accent:#0d1830;--danger:#ff9a8d;--ok-bg:#173a22;--ok-ink:#bfeccb;
   --bad-bg:#47201b;--bad-ink:#ffcdc6;
-}}
+}
 *{box-sizing:border-box}
 html{font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 body{margin:0;background:var(--bg);color:var(--ink)}
@@ -121,7 +117,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
   </aside>
   <section>
     <div class="head">
-      <h2><span id="count">0</span> questions</h2>
+      <h2><span id="count">0</span> <span id="countWord">questions</span></h2>
       <span class="conn off" id="conn">Connecting…</span>
     </div>
     <div id="empty" class="muted">No questions yet. They appear here the moment a student sends one.</div>
@@ -333,6 +329,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
   }
   function refreshCount() {
     $('count').textContent = questions.size;
+    $('countWord').textContent = questions.size === 1 ? 'question' : 'questions';
     $('empty').hidden = questions.size > 0;
   }
 
