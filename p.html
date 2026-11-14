@@ -13,8 +13,8 @@
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
 [hidden]{display:none!important}
-.stage{height:100%;display:flex;align-items:center;justify-content:center;padding:clamp(20px,5vw,72px)}
-#question p{margin:0;font-size:clamp(2rem,5.6vw,6rem);line-height:1.18;font-weight:600;overflow-wrap:anywhere;white-space:pre-wrap;max-height:100%;overflow:auto}
+.stage{height:100%;display:flex;align-items:center;justify-content:center;padding:clamp(16px,5vw,72px)}
+#question p{margin:0;max-width:60ch;line-height:1.3;font-weight:500;overflow-wrap:anywhere;white-space:pre-wrap;max-height:100%;overflow:hidden}
 #join{gap:clamp(24px,6vw,96px);flex-wrap:wrap;text-align:center}
 #qr{background:#fff;border-radius:16px;padding:14px;line-height:0;width:min(46vh,40vw);min-width:200px}
 #qr svg{width:100%;height:auto}
@@ -44,6 +44,18 @@ body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 system-ui,-ap
   var $ = function (id) { return document.getElementById(id); };
   var bc = new BroadcastChannel('ask-live-projector');
   var shownHref = null;
+  // Size the question to fit the window without scrolling: start at a
+  // moderate size and step down for long questions.
+  function fit() {
+    var p = $('text'), box = $('question');
+    if (box.hidden) return;
+    var cs = getComputedStyle(box);
+    var room = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    var size = Math.max(20, Math.min(48, window.innerWidth * 0.032));
+    p.style.fontSize = size + 'px';
+    while (size > 8 && (p.scrollHeight > room || p.scrollWidth > p.clientWidth)) { size -= 1; p.style.fontSize = size + 'px'; }
+  }
+  window.addEventListener('resize', fit);
   function show(name) {
     ['wait', 'join', 'question'].forEach(function (n) { $(n).hidden = n !== name; });
   }
@@ -52,6 +64,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 system-ui,-ap
     if (m.t === 'question') {
       $('text').textContent = m.body; // textContent only
       show('question');
+      fit();
     } else if (m.t === 'join') {
       if (m.href !== shownHref) {
         var qr = qrcode(0, 'M'); qr.addData(m.href); qr.make();
