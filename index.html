@@ -52,6 +52,8 @@ input{width:100%;padding:12px;border-radius:10px;border:2px solid var(--line);ba
 .url{font-size:.85rem;overflow-wrap:anywhere;margin:0 0 14px}
 .join .row{display:flex;gap:8px}
 .join .row button{flex:1;padding:10px 8px}
+#pairCode{flex:1.4;min-width:0;padding:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:700;text-align:center}
+#pairCode::placeholder{letter-spacing:0;font-weight:400;text-transform:none}
 .head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 12px;flex-wrap:wrap}
 .head h2{margin:0;font-size:1.25rem}
 .conn{font-size:.85rem;font-weight:600}
@@ -70,7 +72,7 @@ input{width:100%;padding:12px;border-radius:10px;border:2px solid var(--line);ba
 dialog{border:1px solid var(--line);border-radius:16px;padding:0;width:min(720px,calc(100vw - 24px));max-height:calc(100dvh - 24px);background:var(--panel);color:var(--ink)}
 dialog::backdrop{background:rgba(0,0,0,.55)}
 .big{display:flex;flex-direction:column;max-height:calc(100dvh - 26px)}
-.big p{flex:1;min-height:0;margin:0;padding:24px 24px 8px;font-size:clamp(1.15rem,2.2vw,1.5rem);line-height:1.4;overflow-wrap:anywhere;white-space:pre-wrap;overflow:auto}
+.big p{flex:1;min-height:0;margin:0;padding:24px 24px 8px;font-size:clamp(1.15rem,2.2vw,1.5rem);line-height:1.4;overflow-wrap:anywhere;white-space:pre-wrap;overflow:hidden}
 .big .bar{flex:none;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;padding:16px 24px 20px}
 @media(max-width:520px){.big p{padding:18px 16px 6px}.big .bar{padding:12px 16px 16px}.big .bar button{flex:1}}
 </style>
@@ -110,7 +112,11 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
       <button class="danger" id="endBtn">End session</button>
     </div>
     <button id="projBtn" style="width:100%;margin-top:8px">Open projector window</button>
-    <p class="muted" style="font-size:.8rem;margin:8px 0 0">Drag that window to the projector. It shows the QR code, then only the question you open.</p>
+    <form class="row" id="pairForm" style="margin-top:8px">
+      <input id="pairCode" maxlength="6" placeholder="Screen code" aria-label="Code shown on the other screen" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <button>Connect</button>
+    </form>
+    <p class="muted" id="projHint" style="font-size:.8rem;margin:8px 0 0">Projector on another device: open <b id="projUrl"></b> there and type the code it shows. It displays the QR code, then only the question you open.</p>
     <div class="msg" id="liveMsg" role="alert"></div>
   </aside>
   <section>
@@ -152,17 +158,52 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
   var lastId = 0;
   var openId = null;
 
-  // ---------- projector window ----------
-  // A second window (p.html) on the same browser. It is told only what to
-  // show: the join QR code, or the one question the speaker has opened.
-  var bc = new BroadcastChannel('ask-live-projector');
-  function project() {
-    if (!session) return bc.postMessage({ t: 'idle' });
+  // ---------- projector ----------
+  // The projector page (p.html) can be on any device. It never reads the
+  // database: this page tells it what to show over a Realtime broadcast
+  // channel named after a random key only the two pages know. Broadcasts are
+  // not stored anywhere.
+  var projKey = null, projCh = null;
+  function projectorState() {
+    if (!session) return { t: 'idle' };
     var item = openId != null && questions.get(openId);
-    if (item) bc.postMessage({ t: 'question', body: item.row.body });
-    else bc.postMessage({ t: 'join', code: session.code, href: $('url').dataset.href });
+    if (item) return { t: 'question', body: item.row.body };
+    return { t: 'join', code: session.code, href: $('url').dataset.href };
   }
-  bc.onmessage = function (e) { if (e.data && e.data.t === 'hello') project(); };
+  function project() {
+    if (projCh) projCh.send({ type: 'broadcast', event: 'state', payload: projectorState() });
+  }
+  function projectorStart() {
+    if (projCh) return;
+    projKey = sessionStorage.getItem('ask-live-proj-key');
+    if (!projKey) {
+      projKey = Array.from(crypto.getRandomValues(new Uint8Array(16)), function (x) {
+        return (x + 256).toString(16).slice(1);
+      }).join('');
+      sessionStorage.setItem('ask-live-proj-key', projKey);
+    }
+    projCh = db.channel('proj-' + projKey)
+      .on('broadcast', { event: 'hello' }, project) // a projector just connected
+      .subscribe(function (status) { if (status === 'SUBSCRIBED') project(); });
+  }
+  // Pairing: the other screen shows a short code and listens on a channel
+  // named after it; we send it the real key there, once.
+  function pairProjector(code) {
+    var hint = $('projHint'), ch = db.channel('pair-' + code), done = false;
+    function finish(ok) {
+      if (done) return; done = true;
+      db.removeChannel(ch);
+      fail($('liveMsg'), ok ? null : 'Could not reach that screen. Check the code and try again.');
+      if (ok) { $('pairCode').value = ''; hint.textContent = 'Sent to the other screen. It should show the QR code now.'; }
+    }
+    ch.subscribe(function (status) {
+      if (status === 'SUBSCRIBED') {
+        ch.send({ type: 'broadcast', event: 'key', payload: { k: projKey } }).then(function () {
+          setTimeout(function () { finish(true); }, 500);
+        });
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') finish(false);
+    });
+  }
 
   function show(name) {
     ['signin', 'start', 'live'].forEach(function (n) { $(n).hidden = n !== name; });
@@ -187,6 +228,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 
   // After sign-in or a refresh: rejoin the open session if there is one.
   function resume() {
+    projectorStart();
     db.from('sessions').select('*').eq('open', true).order('created_at', { ascending: false }).limit(1)
       .then(function (r) {
         if (r.error) { show('start'); return fail($('startMsg'), r.error); }
@@ -225,6 +267,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
     $('code').textContent = row.code;
     $('url').textContent = link.href.replace(/^https?:\/\//, '');
     $('url').dataset.href = link.href;
+    $('projUrl').textContent = new URL('p.html', location.href).href.replace(/^https?:\/\//, '');
     var qr = qrcode(0, 'M'); qr.addData(link.href); qr.make();
     $('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
     show('live');
@@ -297,19 +340,35 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
   function expand(id) {
     openId = id;
     questions.get(id).el.classList.remove('new');
-    paintDialog();
     $('dlg').showModal();
+    paintDialog();
     project();
   }
+  function fitDialog() {
+    var p = $('bigText');
+    p.style.fontSize = '';
+    if (!$('dlg').open) return;
+    var size = parseFloat(getComputedStyle(p).fontSize);
+    while (size > 11 && p.scrollHeight > p.clientHeight + 1) { size -= 1; p.style.fontSize = size + 'px'; }
+  }
+  window.addEventListener('resize', fitDialog);
   function paintDialog() {
     var q = questions.get(openId).row;
     $('bigText').textContent = q.body;
+    fitDialog();
     $('answerBtn').textContent = q.answered ? 'Mark unanswered' : 'Mark answered';
   }
   $('closeBtn').addEventListener('click', function () { $('dlg').close(); });
   $('dlg').addEventListener('close', function () { openId = null; project(); });
   $('projBtn').addEventListener('click', function () {
-    window.open('p.html', 'ask-live-projector', 'popup,width=1280,height=720');
+    window.open('p.html#k=' + projKey, 'ask-live-projector', 'popup,width=1280,height=720');
+  });
+  $('pairForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var code = $('pairCode').value.trim().toUpperCase();
+    if (!/^[A-Z2-9]{6}$/.test(code)) return fail($('liveMsg'), 'Type the 6-character code shown on the other screen.');
+    fail($('liveMsg'));
+    pairProjector(code);
   });
   $('answerBtn').addEventListener('click', function () {
     var q = questions.get(openId).row, next = !q.answered;

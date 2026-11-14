@@ -9,7 +9,7 @@ Static pages + Supabase (Postgres, Auth, Realtime). No server code.
 | File | Who opens it | What it does |
 | --- | --- | --- |
 | `index.html` | Speaker | Sign in, start a session, live question list, mark answered, end |
-| `p.html` | Projector | Opened from the speaker page. Shows the QR code, then only the question the speaker opens |
+| `p.html` | Projector | Any device. Shows the QR code, then only the question the speaker opens, sized to fit the screen |
 | `s.html` | Students | One small page (about 2.5 KB gzipped): type a question, send |
 | `supabase/migrations/` | — | Tables, security policies, the `ask` function, the 4-hour cleanup job |
 
@@ -26,8 +26,13 @@ Static pages + Supabase (Postgres, Auth, Realtime). No server code.
   (that tab only).
 - End deletes the session row; questions go with it (`on delete cascade`).
   A `pg_cron` job deletes any session older than 4 hours.
-- The projector window gets its content from the speaker page over a
-  `BroadcastChannel`, so both must be windows of the same browser.
+- The projector never reads the database. The speaker page tells it what to
+  show over a Supabase Realtime broadcast channel named after a random key.
+  Broadcasts are relayed, not stored.
+- Projector on the same device: "Open projector window" passes the key in the
+  link. On another device: open `p.html` there, it shows a 6-character code;
+  type it on the speaker page and press Connect. It stays paired across
+  sessions until that tab is closed.
 
 ## Run locally
 

@@ -7,25 +7,35 @@
 <link rel="icon" href="data:,">
 <title>Live Q&amp;A — Projector</title>
 <style>
-:root{--bg:#f6f4ef;--ink:#1c1b19;--muted:#5d5a53}
-@media(prefers-color-scheme:dark){:root{--bg:#161513;--ink:#f1eee7;--muted:#aaa59a}}
+:root{--bg:#f6f4ef;--ink:#1c1b19;--muted:#5d5a53;--line:#d9d4c8}
+@media(prefers-color-scheme:dark){:root{--bg:#161513;--ink:#f1eee7;--muted:#aaa59a;--line:#3b3934}}
 *{box-sizing:border-box}
-html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+html,body{height:100%;overflow:hidden}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 [hidden]{display:none!important}
-.stage{height:100%;display:flex;align-items:center;justify-content:center;padding:clamp(16px,5vw,72px)}
-#question p{margin:0;max-width:60ch;line-height:1.3;font-weight:500;overflow-wrap:anywhere;white-space:pre-wrap;max-height:100%;overflow:hidden}
+.stage{height:100%;display:flex;align-items:center;justify-content:center;padding:clamp(16px,5vw,72px);overflow:hidden}
+#question p{margin:0;max-width:60ch;line-height:1.3;font-weight:500;overflow-wrap:anywhere;white-space:pre-wrap;overflow:hidden}
 #join{gap:clamp(24px,6vw,96px);flex-wrap:wrap;text-align:center}
 #qr{background:#fff;border-radius:16px;padding:14px;line-height:0;width:min(46vh,40vw);min-width:200px}
 #qr svg{width:100%;height:auto}
-#join h1{font-size:clamp(1.6rem,3.4vw,3.2rem);line-height:1.15;margin:0 0 .4em}
+h1{font-size:clamp(1.6rem,3.4vw,3.2rem);line-height:1.15;margin:0 0 .4em}
 .code{font:700 clamp(2.6rem,7vw,6.5rem)/1.1 ui-monospace,"Cascadia Mono",Consolas,monospace;letter-spacing:.14em;padding-left:.14em}
 .url{color:var(--muted);font-size:clamp(1rem,1.6vw,1.5rem);overflow-wrap:anywhere;margin:.6em 0 0}
-#wait{color:var(--muted);font-size:clamp(1.2rem,2.4vw,2rem);text-align:center}
+#pair,#wait{flex-direction:column;text-align:center}
+.note{color:var(--muted);font-size:clamp(1.05rem,2vw,1.6rem);margin:0;max-width:34ch}
+button{font:inherit;margin-top:28px;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:none;color:var(--muted);cursor:pointer}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 </style>
 </head>
 <body>
-<div class="stage" id="wait">Waiting for the speaker page…<br>Keep the speaker page open in another window of this browser.</div>
+<div class="stage" id="pair" hidden>
+  <p class="note">On the speaker page, type this code under "Open projector window" and press Connect</p>
+  <div class="code" id="pairCode" style="margin-top:.3em"></div>
+</div>
+<div class="stage" id="wait">
+  <p class="note" id="waitText">Connecting…</p>
+  <button id="forget" hidden>Pair with a different speaker</button>
+</div>
 <div class="stage" id="join" hidden>
   <div id="qr"></div>
   <div>
@@ -36,35 +46,47 @@ body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 system-ui,-ap
 </div>
 <div class="stage" id="question" hidden><p id="text"></p></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
 (function () {
-  // The speaker page sends this window only what it should show. Nothing is
-  // fetched or stored here, so unopened questions can never appear.
+  // This screen never reads the database. The speaker page tells it what to
+  // show over a Supabase Realtime broadcast channel: the join QR code, or the
+  // one question the speaker has opened. Broadcasts are not stored anywhere.
   var $ = function (id) { return document.getElementById(id); };
-  var bc = new BroadcastChannel('ask-live-projector');
+  var host = location.hostname;
+  var local = /^(localhost$|127\.|10\.|192\.168\.)/.test(host);
+  var API = local ? 'http://' + host + ':55321' : 'https://vwvejaqzmnxlhohptpxj.supabase.co';
+  var KEY = local ? 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH' : 'sb_publishable_JtxioRcYgOPn44Gv48kDfg_KFYyOEI3';
+  var db = supabase.createClient(API, KEY, { auth: { persistSession: false, autoRefreshToken: false } });
   var shownHref = null;
-  // Size the question to fit the window without scrolling: start at a
-  // moderate size and step down for long questions.
+
+  function show(name) {
+    ['pair', 'wait', 'join', 'question'].forEach(function (n) { $(n).hidden = n !== name; });
+  }
+  function store(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} }
+  function load(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+
+  // Size the question so all of it fits the screen: start at a moderate size
+  // and step down. Nothing ever scrolls on this page.
   function fit() {
     var p = $('text'), box = $('question');
     if (box.hidden) return;
     var cs = getComputedStyle(box);
-    var room = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    var roomH = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    var roomW = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     var size = Math.max(20, Math.min(48, window.innerWidth * 0.032));
     p.style.fontSize = size + 'px';
-    while (size > 8 && (p.scrollHeight > room || p.scrollWidth > p.clientWidth)) { size -= 1; p.style.fontSize = size + 'px'; }
+    while (size > 6 && (p.scrollHeight > roomH || p.scrollWidth > roomW)) {
+      size -= 1; p.style.fontSize = size + 'px';
+    }
   }
   window.addEventListener('resize', fit);
-  function show(name) {
-    ['wait', 'join', 'question'].forEach(function (n) { $(n).hidden = n !== name; });
-  }
-  bc.onmessage = function (e) {
-    var m = e.data || {};
+
+  function render(m) {
     if (m.t === 'question') {
       $('text').textContent = m.body; // textContent only
-      show('question');
-      fit();
+      show('question'); fit();
     } else if (m.t === 'join') {
       if (m.href !== shownHref) {
         var qr = qrcode(0, 'M'); qr.addData(m.href); qr.make();
@@ -74,13 +96,51 @@ body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 system-ui,-ap
       $('code').textContent = m.code;
       $('url').textContent = m.href.replace(/^https?:\/\//, '');
       show('join');
-    } else if (m.t === 'idle') {
+    } else {
       $('text').textContent = ''; shownHref = null;
-      $('wait').textContent = 'No session is running.';
+      $('waitText').textContent = 'Connected. No session is running yet.';
+      $('forget').hidden = false;
       show('wait');
     }
-  };
-  bc.postMessage({ t: 'hello' }); // ask the speaker page for the current state
+  }
+
+  // ---------- connected: follow the speaker ----------
+  function follow(key) {
+    store('ask-live-proj', key);
+    history.replaceState(null, '', location.pathname); // keep the key out of the address bar
+    $('waitText').textContent = 'Connecting…'; show('wait');
+    var ch = db.channel('proj-' + key)
+      .on('broadcast', { event: 'state' }, function (e) { render(e.payload || {}); })
+      .subscribe(function (status) {
+        if (status !== 'SUBSCRIBED') return;
+        if (!$('wait').hidden) {
+          $('waitText').textContent = 'Connected. Waiting for the speaker page…';
+          $('forget').hidden = false;
+        }
+        ch.send({ type: 'broadcast', event: 'hello', payload: {} }); // ask for the current state
+      });
+  }
+  $('forget').addEventListener('click', function () { store('ask-live-proj', null); location.reload(); });
+
+  // ---------- not connected yet: show a pairing code ----------
+  function pair() {
+    var abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789', code = '', buf = new Uint8Array(1);
+    while (code.length < 6) { crypto.getRandomValues(buf); if (buf[0] < 248) code += abc[buf[0] % 31]; }
+    $('pairCode').textContent = code;
+    show('pair');
+    var ch = db.channel('pair-' + code)
+      .on('broadcast', { event: 'key' }, function (e) {
+        var k = e.payload && e.payload.k;
+        if (!/^[0-9a-f]{32}$/.test(k || '')) return;
+        db.removeChannel(ch);
+        follow(k);
+      })
+      .subscribe();
+  }
+
+  var fromLink = (/[#&]k=([0-9a-f]{32})/.exec(location.hash) || [])[1];
+  var key = fromLink || load('ask-live-proj');
+  if (key) follow(key); else pair();
 })();
 </script>
 </body>
