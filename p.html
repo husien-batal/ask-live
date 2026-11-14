@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:,">
+<title>Live Q&amp;A — Projector</title>
+<style>
+:root{--bg:#f6f4ef;--ink:#1c1b19;--muted:#5d5a53}
+@media(prefers-color-scheme:dark){:root{--bg:#161513;--ink:#f1eee7;--muted:#aaa59a}}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+[hidden]{display:none!important}
+.stage{height:100%;display:flex;align-items:center;justify-content:center;padding:clamp(20px,5vw,72px)}
+#question p{margin:0;font-size:clamp(2rem,5.6vw,6rem);line-height:1.18;font-weight:600;overflow-wrap:anywhere;white-space:pre-wrap;max-height:100%;overflow:auto}
+#join{gap:clamp(24px,6vw,96px);flex-wrap:wrap;text-align:center}
+#qr{background:#fff;border-radius:16px;padding:14px;line-height:0;width:min(46vh,40vw);min-width:200px}
+#qr svg{width:100%;height:auto}
+#join h1{font-size:clamp(1.6rem,3.4vw,3.2rem);line-height:1.15;margin:0 0 .4em}
+.code{font:700 clamp(2.6rem,7vw,6.5rem)/1.1 ui-monospace,"Cascadia Mono",Consolas,monospace;letter-spacing:.14em;padding-left:.14em}
+.url{color:var(--muted);font-size:clamp(1rem,1.6vw,1.5rem);overflow-wrap:anywhere;margin:.6em 0 0}
+#wait{color:var(--muted);font-size:clamp(1.2rem,2.4vw,2rem);text-align:center}
+</style>
+</head>
+<body>
+<div class="stage" id="wait">Waiting for the speaker page…<br>Keep the speaker page open in another window of this browser.</div>
+<div class="stage" id="join" hidden>
+  <div id="qr"></div>
+  <div>
+    <h1>Scan to ask a question</h1>
+    <div class="code" id="code"></div>
+    <p class="url" id="url"></p>
+  </div>
+</div>
+<div class="stage" id="question" hidden><p id="text"></p></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+(function () {
+  // The speaker page sends this window only what it should show. Nothing is
+  // fetched or stored here, so unopened questions can never appear.
+  var $ = function (id) { return document.getElementById(id); };
+  var bc = new BroadcastChannel('ask-live-projector');
+  var shownHref = null;
+  function show(name) {
+    ['wait', 'join', 'question'].forEach(function (n) { $(n).hidden = n !== name; });
+  }
+  bc.onmessage = function (e) {
+    var m = e.data || {};
+    if (m.t === 'question') {
+      $('text').textContent = m.body; // textContent only
+      show('question');
+    } else if (m.t === 'join') {
+      if (m.href !== shownHref) {
+        var qr = qrcode(0, 'M'); qr.addData(m.href); qr.make();
+        $('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+        shownHref = m.href;
+      }
+      $('code').textContent = m.code;
+      $('url').textContent = m.href.replace(/^https?:\/\//, '');
+      show('join');
+    } else if (m.t === 'idle') {
+      $('text').textContent = ''; shownHref = null;
+      $('wait').textContent = 'No session is running.';
+      show('wait');
+    }
+  };
+  bc.postMessage({ t: 'hello' }); // ask the speaker page for the current state
+})();
+</script>
+</body>
+</html>

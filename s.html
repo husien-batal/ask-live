@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:,">
+<title>Ask a question</title>
+<style>
+*{box-sizing:border-box}
+html{font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+body{margin:0;background:#f6f4ef;color:#1c1b19}
+main{max-width:34rem;margin:0 auto;padding:20px 16px 32px}
+h1{font-size:1.45rem;line-height:1.2;margin:8px 0 4px}
+p{margin:0 0 14px}
+.muted{color:#5d5a53;font-size:.9rem}
+label{display:block;font-weight:600;margin:14px 0 6px}
+input,textarea,button{font:inherit;width:100%;border-radius:10px}
+input,textarea{padding:12px;border:2px solid #b9b4a8;background:#fff;color:inherit}
+input{text-transform:uppercase;letter-spacing:.2em;font-weight:700;max-width:11rem}
+textarea{min-height:8.5rem;resize:vertical}
+input:focus,textarea:focus{outline:0;border-color:#1f5fd0}
+button{margin-top:14px;padding:14px;border:0;background:#1f5fd0;color:#fff;font-weight:700;cursor:pointer}
+button:focus-visible{outline:3px solid #1c1b19;outline-offset:2px}
+button[disabled]{opacity:.6}
+#n{float:right;font-weight:400}
+#m{margin-top:14px;padding:12px;border-radius:10px;font-weight:600}
+#m:empty{display:none}
+.ok{background:#dff3e3;color:#125227}
+.bad{background:#fbe1dd;color:#8a1c10}
+.wait{background:#e9e6de;color:#3b3934}
+@media(prefers-color-scheme:dark){
+body{background:#161513;color:#f1eee7}
+.muted{color:#aaa59a}
+input,textarea{background:#22211e;border-color:#56524a}
+input:focus,textarea:focus{border-color:#8fb4ff}
+button{background:#8fb4ff;color:#0d1830}
+button:focus-visible{outline-color:#f1eee7}
+.ok{background:#173a22;color:#bfeccb}
+.bad{background:#47201b;color:#ffcdc6}
+.wait{background:#2b2a26;color:#d6d2c8}
+}
+</style>
+<main>
+<h1>Ask a question</h1>
+<p class="muted">Your question is anonymous and deleted when the session ends.</p>
+<noscript><p class="bad" style="padding:12px;border-radius:10px;font-weight:600">This page needs JavaScript to send your question. Please turn it on, or ask out loud.</p></noscript>
+<form id="f">
+<div id="cw">
+<label for="c">Session code</label>
+<input id="c" name="p_code" maxlength="6" required autocomplete="off" autocapitalize="characters" spellcheck="false">
+</div>
+<label for="b">Your question <span id="n" class="muted"></span></label>
+<textarea id="b" name="p_body" maxlength="280" required></textarea>
+<button id="s">Send</button>
+</form>
+<div id="m" role="status" aria-live="polite"></div>
+</main>
+<script>
+(function(){
+var d=document,$=function(i){return d.getElementById(i)},f=$('f'),c=$('c'),b=$('b'),s=$('s'),m=$('m'),n=$('n');
+var h=location.hostname,loc=/^(localhost$|127\.|10\.|192\.168\.)/.test(h);
+var api=loc?'http://'+h+':55321':'https://vwvejaqzmnxlhohptpxj.supabase.co';
+var key=loc?'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH':'sb_publishable_JtxioRcYgOPn44Gv48kDfg_KFYyOEI3';
+var q=(/[?&]c=([^&#]+)/.exec(location.search)||[])[1];
+if(q){c.value=decodeURIComponent(q).toUpperCase().slice(0,6);$('cw').style.display='none'}
+function count(){n.textContent=b.value.length+' / 280'}
+b.oninput=count;count();
+function say(t,k){m.textContent=t;m.className=k}
+function id(){
+  if(crypto.randomUUID)return crypto.randomUUID();
+  var a=crypto.getRandomValues(new Uint8Array(16)),x='',i;
+  a[6]=a[6]&15|64;a[8]=a[8]&63|128;
+  for(i=0;i<16;i++)x+=(a[i]+256).toString(16).slice(1)+(i==3||i==5||i==7||i==9?'-':'');
+  return x;
+}
+function lock(v){s.disabled=v;b.readOnly=v}
+function send(body,qid,tries){
+  var ctl=window.AbortController?new AbortController():null;
+  var t=setTimeout(function(){ctl&&ctl.abort()},15000);
+  fetch(api+'/rest/v1/rpc/ask',{method:'POST',signal:ctl?ctl.signal:void 0,
+    headers:{apikey:key,'Content-Type':'application/json'},
+    body:JSON.stringify({p_code:c.value.trim(),p_body:body,p_id:qid})})
+  .then(function(r){clearTimeout(t);if(!r.ok)throw r.status;return r.json()})
+  .then(function(r){
+    lock(false);
+    if(r=='ok'){b.value='';count();say('Sent ✓ — you can ask another.','ok')}
+    else if(r=='ended')say('Session ended. This session is not taking questions.','bad');
+    else if(r=='busy')say('Lots of questions right now. Wait a few seconds and send again.','bad');
+    else say('Type a question of up to 280 characters.','bad');
+  })
+  .catch(function(){
+    clearTimeout(t);
+    // Same id on every retry, so a question that did arrive is not added twice.
+    say('Sending… weak connection, trying again.','wait');
+    setTimeout(function(){send(body,qid,tries+1)},Math.min(8000,1000*Math.pow(2,tries)));
+  });
+}
+f.onsubmit=function(e){
+  e.preventDefault();
+  var body=b.value.trim();
+  if(!body){say('Type your question first.','bad');return}
+  if(!c.value.trim()){say('Enter the session code shown on the screen.','bad');return}
+  lock(true);say('Sending…','wait');
+  send(body,id(),0);
+};
+})();
+</script>
+</html>
