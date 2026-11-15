@@ -156,9 +156,11 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 
   // ---------- projector ----------
   // The projector page (p.html) can be on any device. It never reads the
-  // database: this page tells it what to show over a Realtime broadcast
-  // channel named after a random key only the two pages know. Broadcasts are
-  // not stored anywhere.
+  // database: this page tells it what to show over a private Realtime
+  // broadcast channel named after a random key only the two pages know.
+  // Only a signed-in user can send on it; the projector can only listen, so
+  // this page repeats the current state every couple of seconds for a
+  // projector that has just connected. Broadcasts are not stored anywhere.
   var projKey = null, projCh = null;
   function projectorState() {
     if (!session) return { t: 'idle' };
@@ -178,14 +180,14 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
       }).join('');
       sessionStorage.setItem('ask-live-proj-key', projKey);
     }
-    projCh = db.channel('proj-' + projKey)
-      .on('broadcast', { event: 'hello' }, project) // a projector just connected
+    projCh = db.channel('proj-' + projKey, { config: { private: true } })
       .subscribe(function (status) { if (status === 'SUBSCRIBED') project(); });
+    setInterval(project, 2000);
   }
   // Pairing: the other screen shows a short code and listens on a channel
   // named after it; we send it the real key there, once.
   function pairProjector(code) {
-    var hint = $('projHint'), ch = db.channel('pair-' + code), done = false;
+    var hint = $('projHint'), ch = db.channel('pair-' + code, { config: { private: true } }), done = false;
     function finish(ok) {
       if (done) return; done = true;
       db.removeChannel(ch);

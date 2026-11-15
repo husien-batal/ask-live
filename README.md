@@ -22,13 +22,17 @@ Static pages + Supabase (Postgres, Auth, Realtime). No server code.
 - Spam limit: 60 questions per minute per session. Nothing about the sender is
   read or stored.
 - The speaker signs in with one Supabase Auth account. Row-level security
-  limits them to their own sessions. The sign-in is kept in `sessionStorage`
+  limits them to their own sessions, and column grants limit them to creating
+  a session (code only), deleting it, and flipping a question's `answered`. The sign-in is kept in `sessionStorage`
   (that tab only).
 - End deletes the session row; questions go with it (`on delete cascade`).
   A `pg_cron` job deletes any session older than 4 hours.
-- The projector never reads the database. The speaker page tells it what to
-  show over a Supabase Realtime broadcast channel named after a random key.
-  Broadcasts are relayed, not stored.
+- The projector never reads the database and never sends anything. The
+  speaker page tells it what to show over a private Supabase Realtime
+  broadcast channel named after a random key, repeating the current state
+  every 2 seconds. Policies on `realtime.messages` let anyone listen on
+  `proj-…` / `pair-…` channels but only a signed-in user send. Broadcasts are
+  relayed, not stored.
 - Projector on the same device: "Open projector window" passes the key in the
   link. On another device: open `p.html` there, it shows a 6-character code;
   type it on the speaker page and press Connect. It stays paired across
@@ -60,5 +64,9 @@ URL and publishable key for both are at the top of each page's script.
 - Schema changes: add a file under `supabase/migrations/`, then `npx supabase db push`.
 - Authentication → Users: add the speaker account.
 - Authentication → Sign In / Providers: turn off "Allow new users to sign up".
+  The projector's protection depends on this: any signed-in user may send on
+  projector channels.
+- Realtime settings: leave "Allow public access" on. The speaker's live
+  question feed uses a public channel.
 - Free projects pause after about 7 days without activity. Open the dashboard
   before class if it has been a while.

@@ -49,9 +49,10 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
 (function () {
-  // This screen never reads the database. The speaker page tells it what to
-  // show over a Supabase Realtime broadcast channel: the join QR code, or the
-  // one question the speaker has opened. Broadcasts are not stored anywhere.
+  // This screen never reads the database and never sends anything. It listens
+  // on a private Supabase Realtime broadcast channel, where the speaker page
+  // says what to show: the join QR code, or the one question the speaker has
+  // opened. Only a signed-in speaker can send there. Broadcasts are not stored.
   var $ = function (id) { return document.getElementById(id); };
   var host = location.hostname;
   var local = /^(localhost$|127\.|10\.|192\.168\.)/.test(host);
@@ -108,15 +109,14 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     store('ask-live-proj', key);
     history.replaceState(null, '', location.pathname); // keep the key out of the address bar
     $('waitText').textContent = 'Connecting…'; show('wait');
-    var ch = db.channel('proj-' + key)
+    db.channel('proj-' + key, { config: { private: true } })
       .on('broadcast', { event: 'state' }, function (e) { render(e.payload || {}); })
       .subscribe(function (status) {
-        if (status !== 'SUBSCRIBED') return;
-        if (!$('wait').hidden) {
+        // The speaker page repeats the current state every couple of seconds.
+        if (status === 'SUBSCRIBED' && !$('wait').hidden) {
           $('waitText').textContent = 'Connected. Waiting for the speaker page…';
           $('forget').hidden = false;
         }
-        ch.send({ type: 'broadcast', event: 'hello', payload: {} }); // ask for the current state
       });
   }
   $('forget').addEventListener('click', function () { store('ask-live-proj', null); location.reload(); });
@@ -127,7 +127,7 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     while (code.length < 6) { crypto.getRandomValues(buf); if (buf[0] < 248) code += abc[buf[0] % 31]; }
     $('pairCode').textContent = code;
     show('pair');
-    var ch = db.channel('pair-' + code)
+    var ch = db.channel('pair-' + code, { config: { private: true } })
       .on('broadcast', { event: 'key' }, function (e) {
         var k = e.payload && e.payload.k;
         if (!/^[0-9a-f]{32}$/.test(k || '')) return;
