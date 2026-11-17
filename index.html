@@ -48,13 +48,17 @@ input{width:100%;padding:12px;border-radius:10px;border:2px solid var(--line);ba
 .url{font-size:.85rem;overflow-wrap:anywhere;margin:0 0 14px}
 .join .row{display:flex;gap:8px}
 .join .row button{flex:1;padding:10px 8px}
-.join .row .gear{display:none;flex:none;width:46px;padding:0;align-items:center;justify-content:center}
+/* phones: the whole session card sits behind the gear; questions come first */
+.mbar{display:none}
+.gear{display:inline-flex;align-items:center;justify-content:center;width:46px;height:46px;padding:0;flex:none}
 .gear svg{width:22px;height:22px}
+.pair-ok{color:var(--ok-ink);font-size:.85rem;font-weight:600;margin:8px 0 0}
 @media(max-width:820px){
-  .join .row .gear{display:inline-flex}
+  .mbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .mbar b{font:700 1.35rem ui-monospace,"Cascadia Mono",Consolas,monospace;letter-spacing:.12em;color:var(--ink);margin-left:.3em}
   .gear[aria-expanded="true"]{border-color:var(--accent);color:var(--accent)}
-  #projPanel{display:none}
-  #projPanel.open{display:block}
+  .join{display:none}
+  .join.open{display:block}
 }
 #pairCode{flex:1.4;min-width:0;padding:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:700;text-align:center}
 #pairCode::placeholder{letter-spacing:0;font-weight:400;text-transform:none}
@@ -107,14 +111,17 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 </div>
 
 <div id="live" hidden>
-  <aside class="join">
+  <div class="mbar">
+    <span class="muted">Session <b id="mcode"></b></span>
+    <button class="gear" id="gearBtn" aria-expanded="false" aria-controls="joinCard" aria-label="Session and projector settings" title="Session and projector settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  </div>
+  <aside class="join" id="joinCard">
     <div id="qr"></div>
     <div class="code" id="code"></div>
     <p class="url muted" id="url"></p>
     <div class="row">
       <button id="copyBtn">Copy link</button>
       <button class="danger" id="endBtn">End session</button>
-      <button class="gear" id="gearBtn" aria-expanded="false" aria-controls="projPanel" aria-label="Projector settings" title="Projector settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     </div>
     <div id="projPanel">
     <button id="projBtn" style="width:100%;margin-top:8px">Open projector window</button>
@@ -123,6 +130,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
       <button>Connect</button>
     </form>
     <p class="muted" id="projHint" style="font-size:.8rem;margin:8px 0 0">Projector on another device: open <b id="projUrl"></b> there and type the code it shows. It displays the QR code, then only the question you open.</p>
+    <p class="pair-ok" id="pairOk" role="status" hidden>Sent to the other screen. It should show the QR code now.</p>
     </div>
     <div class="msg" id="liveMsg" role="alert"></div>
   </aside>
@@ -198,12 +206,17 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
   // Pairing: the other screen shows a short code and listens on a channel
   // named after it; we send it the real key there, once.
   function pairProjector(code) {
-    var hint = $('projHint'), ch = db.channel('pair-' + code, { config: { private: true } }), done = false;
+    var ch = db.channel('pair-' + code, { config: { private: true } }), done = false;
+    $('pairOk').hidden = true;
     function finish(ok) {
       if (done) return; done = true;
       db.removeChannel(ch);
       fail($('liveMsg'), ok ? null : 'Could not reach that screen. Check the code and try again.');
-      if (ok) { $('pairCode').value = ''; hint.textContent = 'Sent to the other screen. It should show the QR code now.'; }
+      if (ok) {
+        $('pairCode').value = '';
+        $('pairOk').hidden = false;
+        setTimeout(function () { $('pairOk').hidden = true; }, 8000);
+      }
     }
     ch.subscribe(function (status) {
       if (status === 'SUBSCRIBED') {
@@ -274,6 +287,8 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
     $('list').textContent = ''; fail($('liveMsg')); refreshCount();
     var link = new URL('s.html', location.href); link.search = '?c=' + row.code; link.hash = '';
     $('code').textContent = row.code;
+    $('mcode').textContent = row.code;
+    setCard(false);
     $('url').textContent = link.href.replace(/^https?:\/\//, '');
     $('url').dataset.href = link.href;
     $('projUrl').textContent = new URL('p.html', location.href).href.replace(/^https?:\/\//, '');
@@ -373,10 +388,13 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
   $('projBtn').addEventListener('click', function () {
     window.open('p.html#k=' + projKey, 'ask-live-projector', 'popup,width=1280,height=720');
   });
-  // On phones the projector controls sit behind the gear button.
-  $('gearBtn').addEventListener('click', function () {
-    var open = $('projPanel').classList.toggle('open');
+  // On phones the session card (QR, link, End, projector) sits behind the gear.
+  function setCard(open) {
+    $('joinCard').classList.toggle('open', open);
     $('gearBtn').setAttribute('aria-expanded', String(open));
+  }
+  $('gearBtn').addEventListener('click', function () {
+    setCard(!$('joinCard').classList.contains('open'));
   });
   $('pairForm').addEventListener('submit', function (e) {
     e.preventDefault();
