@@ -3,3 +3,4 @@ supabase/.branches/
 .env*
 node_modules/
 NEXT-STEPS.md
+CODE-WALKTHROUGH.md
