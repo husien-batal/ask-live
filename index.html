@@ -64,7 +64,7 @@ input{width:100%;padding:12px;border-radius:10px;border:2px solid var(--line);ba
   html,body{background:#fff!important;color:#000!important}
   body>*{display:none!important}
   #printSheet{display:flex!important;flex-direction:column;align-items:center;text-align:center;color:#000}
-  #printSheet h1{font-size:34pt;margin:0 0 4pt}
+  #printSheet h1{font-size:30pt;line-height:1.15;max-width:17cm;margin:0 0 6pt}
   .psub{font-size:16pt;margin:0 0 18pt}
   #printQr{width:12cm;line-height:0}
   #printQr svg{width:100%;height:auto}
@@ -158,6 +158,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
       <button id="copyBtn">Copy link</button>
       <button class="danger" id="endBtn">End session</button>
     </div>
+    <button id="printLiveBtn" style="width:100%;margin-top:8px">Print QR code</button>
     <div id="projPanel">
     <button id="projBtn" style="width:100%;margin-top:8px">Open projector window</button>
     <form class="row" id="pairForm" style="margin-top:8px">
@@ -180,8 +181,8 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 </div>
 
 <div id="printSheet" aria-hidden="true">
-  <h1>Ask a question</h1>
-  <p class="psub">Scan with your phone camera</p>
+  <h1>Have a question related to this session?</h1>
+  <p class="psub">Scan with your phone camera to ask it anonymously</p>
   <div id="printQr"></div>
   <p class="pcode">Code <b id="printCode"></b></p>
   <p class="purl" id="printUrl"></p>
@@ -288,11 +289,17 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
     var qr = qrcode(0, 'M'); qr.addData(text); qr.make();
     return qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
   }
+  function fillPrint(code) {
+    var href = studentLink(code);
+    $('printCode').textContent = code;
+    $('printUrl').textContent = href.replace(/^https?:\/\//, '');
+    $('printQr').innerHTML = qrSvg(href);
+  }
   function showRoom(code) {
     roomCode = code;
     var href = studentLink(code), short = href.replace(/^https?:\/\//, ''), svg = qrSvg(href);
     $('roomCode').textContent = code; $('roomUrl').textContent = short; $('roomQr').innerHTML = svg;
-    $('printCode').textContent = code; $('printUrl').textContent = short; $('printQr').innerHTML = svg;
+    fillPrint(code);
     $('room').hidden = false;
   }
   function toStart() {
@@ -303,6 +310,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
     });
   }
   $('printBtn').addEventListener('click', function () { window.print(); });
+  $('printLiveBtn').addEventListener('click', function () { fillPrint(session.code); window.print(); });
   $('recodeBtn').addEventListener('click', function () {
     if (!confirm('Change your code? Printed QR codes and saved links with ' + roomCode + ' will stop working.')) return;
     $('recodeBtn').disabled = true; fail($('startMsg'));
