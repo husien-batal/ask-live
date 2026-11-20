@@ -48,6 +48,32 @@ input{width:100%;padding:12px;border-radius:10px;border:2px solid var(--line);ba
 .url{font-size:.85rem;overflow-wrap:anywhere;margin:0 0 14px}
 .join .row{display:flex;gap:8px}
 .join .row button{flex:1;padding:10px 8px}
+/* start screen: permanent code */
+.room{text-align:center;margin-top:18px}
+#roomQr{background:#fff;border-radius:12px;padding:10px;line-height:0;width:200px;margin:0 auto}
+#roomQr svg{width:100%;height:auto}
+.room .code{font-size:2.2rem;margin:12px 0 2px}
+.room .url{margin:0 0 10px}
+.room .row{display:flex;gap:8px}
+.card .room .row button{flex:1;margin-top:0;padding:10px 8px}
+
+/* printing: only the QR sheet, black on white */
+#printSheet{display:none}
+@media print{
+  @page{margin:1.5cm}
+  html,body{background:#fff!important;color:#000!important}
+  body>*{display:none!important}
+  #printSheet{display:flex!important;flex-direction:column;align-items:center;text-align:center;color:#000}
+  #printSheet h1{font-size:34pt;margin:0 0 4pt}
+  .psub{font-size:16pt;margin:0 0 18pt}
+  #printQr{width:12cm;line-height:0}
+  #printQr svg{width:100%;height:auto}
+  .pcode{font-size:18pt;margin:16pt 0 2pt}
+  .pcode b{font:700 30pt ui-monospace,Consolas,monospace;letter-spacing:.12em;margin-left:.3em}
+  .purl{font-size:12pt;margin:0 0 14pt}
+  .pnote{font-size:11pt;max-width:14cm;margin:0}
+}
+
 /* phones: the whole session card sits behind the gear; questions come first */
 .mbar{display:none}
 .gear{display:inline-flex;align-items:center;justify-content:center;width:46px;height:46px;padding:0;flex:none}
@@ -103,7 +129,16 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 <div class="wrap" id="start" hidden>
   <div class="card">
     <h1>Ready when you are</h1>
-    <p class="muted" style="margin:0">Starting a session shows a QR code. Students scan it and send questions anonymously. Ending the session deletes every question.</p>
+    <p class="muted" style="margin:0">This is your permanent code. Print it once and reuse it. Students can only send questions while a session is running, and ending the session deletes every question.</p>
+    <div class="room" id="room" hidden>
+      <div id="roomQr"></div>
+      <div class="code" id="roomCode"></div>
+      <p class="url muted" id="roomUrl"></p>
+      <div class="row">
+        <button id="printBtn">Print QR code</button>
+        <button id="recodeBtn">Change code</button>
+      </div>
+    </div>
     <button class="primary" id="startBtn">Start session</button>
     <button class="link" id="signoutBtn">Sign out</button>
     <div class="msg" id="startMsg" role="alert"></div>
@@ -142,6 +177,15 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
     <div id="empty" class="muted">No questions yet. They appear here the moment a student sends one.</div>
     <ol id="list"></ol>
   </section>
+</div>
+
+<div id="printSheet" aria-hidden="true">
+  <h1>Ask a question</h1>
+  <p class="psub">Scan with your phone camera</p>
+  <div id="printQr"></div>
+  <p class="pcode">Code <b id="printCode"></b></p>
+  <p class="purl" id="printUrl"></p>
+  <p class="pnote">Anonymous. Questions are taken only while a session is running, and deleted when it ends.</p>
 </div>
 
 <dialog id="dlg">
@@ -232,6 +276,43 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
   }
   function fail(el, err) { el.textContent = err ? (err.message || String(err)) : ''; }
 
+  // ---------- permanent code ----------
+  // Each speaker has one code that stays the same across sessions, so the QR
+  // can be printed. The database only accepts questions while a session runs.
+  var roomCode = null;
+  function studentLink(code) {
+    var l = new URL('s.html', location.href); l.search = '?c=' + code; l.hash = '';
+    return l.href;
+  }
+  function qrSvg(text) {
+    var qr = qrcode(0, 'M'); qr.addData(text); qr.make();
+    return qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+  }
+  function showRoom(code) {
+    roomCode = code;
+    var href = studentLink(code), short = href.replace(/^https?:\/\//, ''), svg = qrSvg(href);
+    $('roomCode').textContent = code; $('roomUrl').textContent = short; $('roomQr').innerHTML = svg;
+    $('printCode').textContent = code; $('printUrl').textContent = short; $('printQr').innerHTML = svg;
+    $('room').hidden = false;
+  }
+  function toStart() {
+    show('start');
+    db.rpc('my_room').then(function (r) {
+      if (r.error) return fail($('startMsg'), r.error);
+      showRoom(r.data);
+    });
+  }
+  $('printBtn').addEventListener('click', function () { window.print(); });
+  $('recodeBtn').addEventListener('click', function () {
+    if (!confirm('Change your code? Printed QR codes and saved links with ' + roomCode + ' will stop working.')) return;
+    $('recodeBtn').disabled = true; fail($('startMsg'));
+    db.rpc('new_room_code').then(function (r) {
+      $('recodeBtn').disabled = false;
+      if (r.error) return fail($('startMsg'), r.error);
+      showRoom(r.data);
+    });
+  });
+
   // ---------- auth ----------
   $('signinForm').addEventListener('submit', function (e) {
     e.preventDefault();
@@ -254,38 +335,27 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
     db.from('sessions').select('*').eq('open', true).order('created_at', { ascending: false }).limit(1)
       .then(function (r) {
         if (r.error) { show('start'); return fail($('startMsg'), r.error); }
-        if (r.data.length) enter(r.data[0]); else show('start');
+        if (r.data.length) enter(r.data[0]); else toStart();
       });
   }
 
   // ---------- start ----------
-  function newCode() {
-    // No look-alikes: 0/O, 1/I/L are left out.
-    var abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789', out = '';
-    var buf = new Uint8Array(1);
-    while (out.length < 6) {
-      crypto.getRandomValues(buf);
-      if (buf[0] < 248) out += abc[buf[0] % 31]; // 248 = 31 * 8, keeps it unbiased
-    }
-    return out;
-  }
+  // start_session() uses the speaker's permanent code. If a session is
+  // already running (another tab or device), it returns that one instead.
   $('startBtn').addEventListener('click', function () {
     $('startBtn').disabled = true; fail($('startMsg'));
-    (function attempt(left) {
-      db.from('sessions').insert({ code: newCode() }).select().single().then(function (r) {
-        if (r.error && r.error.code === '23505' && left) return attempt(left - 1); // code taken
-        $('startBtn').disabled = false;
-        if (r.error) return fail($('startMsg'), r.error);
-        enter(r.data);
-      });
-    })(3);
+    db.rpc('start_session').then(function (r) {
+      $('startBtn').disabled = false;
+      if (r.error) return fail($('startMsg'), r.error);
+      enter(r.data);
+    });
   });
 
   // ---------- live ----------
   function enter(row) {
     session = row; questions.clear(); lastId = 0;
     $('list').textContent = ''; fail($('liveMsg')); refreshCount();
-    var link = new URL('s.html', location.href); link.search = '?c=' + row.code; link.hash = '';
+    var link = new URL(studentLink(row.code));
     $('code').textContent = row.code;
     $('mcode').textContent = row.code;
     setCard(false);
@@ -434,7 +504,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
       session = null; questions.clear(); $('list').textContent = '';
       if ($('dlg').open) $('dlg').close();
       project();
-      show('start');
+      toStart();
     });
   });
 

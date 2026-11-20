@@ -8,13 +8,17 @@ Static pages + Supabase (Postgres, Auth, Realtime). No server code.
 
 | File | Who opens it | What it does |
 | --- | --- | --- |
-| `index.html` | Speaker | Sign in, start a session, live question list, mark answered, end |
+| `index.html` | Speaker | Sign in, permanent code and printable QR, start a session, live question list, mark answered, end |
 | `p.html` | Projector | Any device. Shows the QR code, then only the question the speaker opens, sized to fit the screen |
 | `s.html` | Students | One small page (about 2.5 KB gzipped): type a question, send |
 | `supabase/migrations/` | — | Tables, security policies, the `ask` function, the 4-hour cleanup job |
 
 ## How it fits together
 
+- Each speaker account has a permanent code (table `rooms`), so the QR can be
+  printed once. `start_session()` opens a session under that code; `ask()`
+  only accepts questions while one is running, so the printed link is useless
+  between sessions. "Change code" (between sessions only) retires a misused code.
 - Students have no table access. Their only door is the `ask(p_code, p_body, p_id)`
   database function, called with the project's publishable key.
 - `p_id` is a random id the student page makes per question, so an automatic

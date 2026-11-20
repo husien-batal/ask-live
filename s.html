@@ -73,7 +73,7 @@ function send(body,qid,tries){
   .then(function(r){
     lock(false);
     if(r=='ok'){b.value='';count();say('Sent ✓ — you can ask another.','ok')}
-    else if(r=='ended')say('Session ended. This session is not taking questions.','bad');
+    else if(r=='ended')say('No session is running right now. Your question is still here \u2014 send it when the speaker starts.','bad');
     else if(r=='busy')say('Lots of questions right now. Wait a few seconds and send again.','bad');
     else say('Type a question of up to 280 characters.','bad');
   })
