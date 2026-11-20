@@ -18,7 +18,8 @@ Static pages + Supabase (Postgres, Auth, Realtime). No server code.
 - Each speaker account has a permanent code (table `rooms`), so the QR can be
   printed once. `start_session()` opens a session under that code; `ask()`
   only accepts questions while one is running, so the printed link is useless
-  between sessions. "Change code" (between sessions only) retires a misused code.
+  between sessions. The student page also keeps Send disabled until a session
+  starts, checking `session_status()` every 10 seconds. "Change code" (between sessions only) retires a misused code.
 - Students have no table access. Their only door is the `ask(p_code, p_body, p_id)`
   database function, called with the project's publishable key.
 - `p_id` is a random id the student page makes per question, so an automatic

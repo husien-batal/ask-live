@@ -127,3 +127,16 @@ grant  execute on function public.new_room_code() to authenticated;
 -- Sessions are created only through start_session().
 revoke insert (code) on public.sessions from authenticated;
 revoke insert        on public.sessions from authenticated;
+
+-- Lets the student page show whether a code is live before anyone types, and
+-- keep Send disabled until it is. Reveals nothing ask() does not already
+-- reveal; ask() still refuses questions on its own when no session runs.
+create function public.session_status(p_code text) returns text
+language sql stable security definer set search_path = '' as $$
+  select case when exists (
+    select 1 from public.sessions
+     where code = upper(btrim(coalesce(p_code, ''))) and open
+  ) then 'open' else 'closed' end;
+$$;
+revoke execute on function public.session_status(text) from public;
+grant  execute on function public.session_status(text) to anon, authenticated;

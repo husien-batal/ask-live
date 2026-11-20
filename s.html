@@ -62,7 +62,26 @@ function id(){
   for(i=0;i<16;i++)x+=(a[i]+256).toString(16).slice(1)+(i==3||i==5||i==7||i==9?'-':'');
   return x;
 }
-function lock(v){s.disabled=v;b.readOnly=v}
+function lock(v){s.disabled=v||open===false;b.readOnly=v}
+// Send stays disabled until the speaker starts a session. The page checks
+// every 10 s while closed (and when the phone wakes), then stops polling.
+var open=null,poll=null;
+function setOpen(v){
+  var was=open;open=v;s.disabled=v===false;clearTimeout(poll);
+  if(v===false){say('No session is running right now. You can type your question \u2014 Send unlocks when the speaker starts.','wait');poll=setTimeout(check,10000)}
+  else if(v&&was===false)say('The session has started \u2014 go ahead and send.','ok');
+}
+function check(){
+  var code=c.value.trim();if(code.length!=6)return;
+  if(d.hidden){poll=setTimeout(check,10000);return}
+  fetch(api+'/rest/v1/rpc/session_status',{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify({p_code:code})})
+  .then(function(r){return r.ok?r.json():null})
+  .then(function(r){if(r=='open')setOpen(true);else if(r=='closed')setOpen(false)})
+  .catch(function(){if(open===false)poll=setTimeout(check,10000)});
+}
+c.oninput=function(){if(c.value.trim().length==6)check()};
+d.addEventListener('visibilitychange',function(){if(!d.hidden&&open!==true)check()});
+check();
 function send(body,qid,tries){
   var ctl=window.AbortController?new AbortController():null;
   var t=setTimeout(function(){ctl&&ctl.abort()},15000);
@@ -73,7 +92,7 @@ function send(body,qid,tries){
   .then(function(r){
     lock(false);
     if(r=='ok'){b.value='';count();say('Sent ✓ — you can ask another.','ok')}
-    else if(r=='ended')say('No session is running right now. Your question is still here \u2014 send it when the speaker starts.','bad');
+    else if(r=='ended')setOpen(false);
     else if(r=='busy')say('Lots of questions right now. Wait a few seconds and send again.','bad');
     else say('Type a question of up to 280 characters.','bad');
   })
@@ -86,6 +105,7 @@ function send(body,qid,tries){
 }
 f.onsubmit=function(e){
   e.preventDefault();
+  if(open===false)return;
   var body=b.value.trim();
   if(!body){say('Type your question first.','bad');return}
   if(!c.value.trim()){say('Enter the session code shown on the screen.','bad');return}
