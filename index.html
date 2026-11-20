@@ -35,6 +35,12 @@ label{display:block;font-weight:600;margin:14px 0 6px}
 input{width:100%;padding:12px;border-radius:10px;border:2px solid var(--line);background:var(--bg);color:var(--ink)}
 .card button{width:100%;margin-top:16px;padding:14px}
 .card .link{border:0;background:none;color:var(--muted);font-weight:400;text-decoration:underline;padding:8px}
+.links{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
+.card .links .link{width:auto;margin-top:8px}
+#pwForm{margin-top:12px;padding-top:16px;border-top:1px solid var(--line)}
+#pwForm h2{font-size:1.1rem;margin:0}
+.pwrow{display:flex;gap:8px}
+.card .pwrow button{flex:1}
 
 /* live session */
 #live{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:24px;max-width:1280px;margin:0 auto;padding:20px 16px 40px;align-items:start}
@@ -140,7 +146,26 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
       </div>
     </div>
     <button class="primary" id="startBtn">Start session</button>
-    <button class="link" id="signoutBtn">Sign out</button>
+    <div class="links">
+      <button class="link" id="pwBtn" aria-expanded="false" aria-controls="pwForm">Change password</button>
+      <button class="link" id="signoutBtn">Sign out</button>
+    </div>
+    <form id="pwForm" hidden>
+      <h2>Change password</h2>
+      <input id="pwUser" type="email" autocomplete="username" hidden>
+      <label for="pwOld">Current password</label>
+      <input id="pwOld" type="password" autocomplete="current-password" required>
+      <label for="pwNew">New password</label>
+      <input id="pwNew" type="password" autocomplete="new-password" required>
+      <label for="pwNew2">New password again</label>
+      <input id="pwNew2" type="password" autocomplete="new-password" required>
+      <p class="muted" style="font-size:.85rem;margin:8px 0 0">At least 10 characters. A long passphrase is best: this one account controls every session and the projector.</p>
+      <div class="pwrow">
+        <button class="primary" id="pwSave">Save password</button>
+        <button type="button" id="pwCancel">Cancel</button>
+      </div>
+    </form>
+    <p class="pair-ok" id="pwOk" role="status" style="text-align:center" hidden>Password changed. Use the new one next time you sign in.</p>
     <div class="msg" id="startMsg" role="alert"></div>
   </div>
 </div>
@@ -246,7 +271,11 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
     }
     projCh = db.channel('proj-' + projKey, { config: { private: true } })
       .subscribe(function (status) { if (status === 'SUBSCRIBED') project(); });
-    setInterval(project, 2000);
+    // Repeat the state so a projector that has just connected catches up:
+    // every 2 s during a session, every 30 s otherwise, so a speaker page left
+    // open between classes does not use up the Realtime message allowance.
+    var ticks = 0;
+    setInterval(function () { ticks++; if (session || ticks % 15 === 0) project(); }, 2000);
   }
   // Pairing: the other screen shows a short code and listens on a channel
   // named after it; we send it the real key there, once.
@@ -303,6 +332,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
     $('room').hidden = false;
   }
   function toStart() {
+    pwClose(); $('pwOk').hidden = true;
     show('start');
     db.rpc('my_room').then(function (r) {
       if (r.error) return fail($('startMsg'), r.error);
@@ -319,6 +349,43 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
       if (r.error) return fail($('startMsg'), r.error);
       showRoom(r.data);
     });
+  });
+
+  // ---------- change password ----------
+  // Asks for the current password first, so an unlocked laptop left
+  // unattended is not enough to take over the account.
+  function pwClose() {
+    $('pwForm').hidden = true; $('pwBtn').setAttribute('aria-expanded', 'false');
+    $('pwOld').value = $('pwNew').value = $('pwNew2').value = '';
+  }
+  $('pwBtn').addEventListener('click', function () {
+    fail($('startMsg')); $('pwOk').hidden = true;
+    if (!$('pwForm').hidden) return pwClose();
+    $('pwForm').hidden = false; $('pwBtn').setAttribute('aria-expanded', 'true');
+    db.auth.getUser().then(function (r) { $('pwUser').value = (r.data.user && r.data.user.email) || ''; });
+    $('pwOld').focus();
+  });
+  $('pwCancel').addEventListener('click', function () { pwClose(); fail($('startMsg')); });
+  $('pwForm').addEventListener('submit', function (e) {
+    e.preventDefault(); fail($('startMsg'));
+    var oldPw = $('pwOld').value, pw = $('pwNew').value;
+    if (pw.length < 10) return fail($('startMsg'), 'Choose a new password of at least 10 characters.');
+    if (pw !== $('pwNew2').value) return fail($('startMsg'), 'The two new passwords do not match.');
+    if (pw === oldPw) return fail($('startMsg'), 'The new password is the same as the current one.');
+    $('pwSave').disabled = true;
+    db.auth.getUser().then(function (r) {
+      var email = r.data.user && r.data.user.email;
+      if (!email) throw new Error('Sign in again, then try once more.');
+      return db.auth.signInWithPassword({ email: email, password: oldPw });
+    }).then(function (r) {
+      if (r.error) throw new Error('The current password is not right.');
+      return db.auth.updateUser({ password: pw });
+    }).then(function (r) {
+      if (r.error) throw r.error;
+      pwClose(); $('pwOk').hidden = false;
+    }).catch(function (err) {
+      fail($('startMsg'), err);
+    }).then(function () { $('pwSave').disabled = false; });
   });
 
   // ---------- auth ----------
